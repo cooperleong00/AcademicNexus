@@ -1,0 +1,7 @@
+arxiv==1.4.3
+beautifulsoup4==4.12.2
+numba==0.56.4
+openai==0.27.4
+pip-system-certs==4.0
+streamlit==1.21.0
+wincertstore==0.2
