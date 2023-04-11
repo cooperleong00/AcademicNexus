@@ -56,11 +56,25 @@ Make sure to use specific information from the article titles and abstracts to s
 
 
 def get_chatgpt_response(prompt, **kwargs):
+    """Get response from GPT-3.5-turbo directly
+    Args:
+        prompt (str): prompt text
+        **kwargs: other arguments for openai.ChatCompletion.create
+    Returns:
+        str: response text
+    """
     completion = openai.ChatCompletion.create(
         model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}], temperature=0.25, top_p=0.95, **kwargs)
     return completion.choices[0]['message']['content']
 
 def get_chatgpt_response_stream(prompt, **kwargs):
+    """Get response from GPT-3.5-turbo in stream mode
+    Args:
+        prompt (str): prompt text
+        **kwargs: other arguments for openai.ChatCompletion.create
+    Yields:
+        str: response chunk text, return newest generated token each time
+    """
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}], temperature=0.25, top_p=0.95, stream=True, **kwargs)
     for chunk in response:
@@ -89,7 +103,6 @@ def main():
         with st.spinner("Extracting keywords..."):
             keywords = get_chatgpt_response(prompt)
 
-
         print("keywords "+""*80)
         print(keywords)
         print("-"*100)
@@ -104,14 +117,17 @@ def main():
         query = r"%20".join([k.replace(" ", "+") for k in keywords])
         result_ids = []
         with st.spinner("Searching related papers..."):
+            # search for related papers, 10 results per page
             for start in [0, 10]:
                 resp = requests.get(f"https://search.arxiv.org/?in=&query={query}&startat={start}", verify=False)
                 soup = bs4.BeautifulSoup(resp.text, "html.parser")
                 ids = [osp.basename(a.text) for a in soup.find_all('a', class_='url')]
+                # remove the input paper
                 ids = [id for id in ids if id != input_id]
                 result_ids.extend(ids)
 
             result_search = arxiv.Search(id_list=result_ids)
+
         result_infos = [(paper.title, paper.summary.replace("\n", " ")) for paper in result_search.results()]
         result_titles = [i[0] for i in result_infos]
         result_abstracts = [i[1] for i in result_infos]
@@ -120,12 +136,14 @@ def main():
         print(prompt)
         print("-"*100)
         print("")
+        # let gpt-3.5-turbo rank the titles
         ranked_titles = get_chatgpt_response(prompt)
         print(ranked_titles)
         ranked_titles = eval(ranked_titles)
         ranked_ids = [result_ids[result_titles.index(t)] for t in ranked_titles]
         ranked_abstracts = [result_abstracts[result_titles.index(t)] for t in ranked_titles]
 
+        # add the input paper to the top
         ranked_titles = [title] + ranked_titles
         ranked_ids = [input_id] + ranked_ids
         ranked_abstracts = [abstract] + ranked_abstracts
@@ -144,8 +162,10 @@ def main():
         insight_area = st.empty()
         insight = ""
         for delta in get_chatgpt_response_stream(prompt):
+            # add the new generated token to the text
             insight += delta
             print(delta, sep="", end="")
+            # update the text area
             insight_area.markdown(insight, unsafe_allow_html=True)
 
         st.write("### Reference")
